@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload Complaint with Image</title>
+    <style>
+      #camera-container {
+        display: none;
+        text-align: center;
+      }
+
+      #canvas-container {
+        display: none;
+        text-align: center;
+      }
+
+      #photo {
+        cursor: pointer;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin: 10px 0;
+      }
+
+      #successMessage {
+        color: green;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Submit Complaint</h1>
+    <form id="complaintForm">
+      <label for="name">Name:</label>
+      <input type="text" id="name" required /><br /><br />
+
+      <label for="contact">Contact:</label>
+      <input type="text" id="contact" required /><br /><br />
+
+      <label for="complaint">Complaint:</label>
+      <textarea id="complaint" required></textarea><br /><br />
+
+      <!-- <label for="latitude">Latitude:</label>
+      <input type="text" id="latitude" readonly /><br /><br />
+
+      <label for="longitude">Longitude:</label>
+      <input type="text" id="longitude" readonly /><br /><br /> -->
+
+      <label>Upload Image:</label>
+      <div id="photo" onclick="openCamera()">Click to Open Camera</div>
+
+      <div id="camera-container">
+        <video id="video" width="320" height="240" autoplay></video><br />
+        <button id="capture" type="button" onclick="captureImage()">
+          Capture
+        </button>
+      </div>
+
+      <div id="canvas-container">
+        <canvas id="canvas" width="320" height="240"></canvas><br />
+        <button id="retake" type="button" onclick="retakeImage()">
+          Retake
+        </button>
+      </div>
+
+      <input
+        type="file"
+        id="photoInput"
+        style="display: none"
+        accept="image/*"
+      />
+
+      <br /><br />
+      <button type="submit">Submit</button>
+    </form>
+
+    <div id="successMessage">Complaint submitted successfully!</div>
+
+    <script>
+      let currentStream = null;
+      let imageCaptured = false; // Flag to track if the image has been captured
+      let latitude = null;
+      let longitude = null;
+
+      // Open the camera when user clicks the image
+      function openCamera() {
+        if (imageCaptured) return; // Prevent opening camera if the image has already been captured
+
+        document.getElementById("camera-container").style.display = "block";
+        document.getElementById("photo").style.display = "none";
+        startCamera();
+      }
+
+      // Start the camera feed
+      function startCamera() {
+        navigator.mediaDevices
+          .getUserMedia({ video: true })
+          .then((stream) => {
+            currentStream = stream;
+            document.getElementById("video").srcObject = stream;
+          })
+          .catch((err) => {
+            alert("Camera not accessible: " + err);
+          });
+      }
+
+      // Capture the image
+      function captureImage() {
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const context = canvas.getContext("2d");
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Stop the camera stream after capturing the image
+        if (currentStream) {
+          currentStream.getTracks().forEach((track) => track.stop());
+        }
+
+        document.getElementById("camera-container").style.display = "none";
+        document.getElementById("canvas-container").style.display = "block";
+        document.getElementById("successMessage").style.display = "none"; // Hide success message
+        imageCaptured = true; // Mark that an image has been captured
+
+        // Capture location when the photo is taken
+        captureLocation();
+      }
+
+      // Capture the location (latitude and longitude)
+      function captureLocation() {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              latitude = position.coords.latitude;
+              longitude = position.coords.longitude;
+
+              // Fill in the latitude and longitude values
+              document.getElementById("latitude").value = latitude;
+              document.getElementById("longitude").value = longitude;
+            },
+            (error) => {
+              alert("Error retrieving location: " + error.message);
+            }
+          );
+        } else {
+          alert("Geolocation is not supported by this browser.");
+        }
+      }
+
+      // Retake the image
+      function retakeImage() {
+        imageCaptured = false; // Reset the flag to allow retaking
+        document.getElementById("canvas-container").style.display = "none";
+        document.getElementById("photo").style.display = "none";
+        openCamera(); // Open the camera again
+      }
+
+      // Handle form submission
+      document
+        .getElementById("complaintForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          // Check if latitude and longitude are available
+          if (!latitude || !longitude) {
+            alert("Location is required for submission.");
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append("name", document.getElementById("name").value);
+          formData.append("contact", document.getElementById("contact").value);
+          formData.append(
+            "complaint",
+            document.getElementById("complaint").value
+          );
+          formData.append("latitude", latitude);
+          formData.append("longitude", longitude);
+
+          // Get image data from canvas and convert it to blob
+          const canvas = document.getElementById("canvas");
+          canvas.toBlob(function (blob) {
+            formData.append("photo", blob, "photo.jpg");
+            submitForm(formData);
+          }, "image/jpeg");
+        });
+
+      // Submit the form data
+      async function submitForm(formData) {
+        try {
+          const response = await fetch(
+            "http://localhost:3000/submit-complaint",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+          const result = await response.json();
+          if (response.ok) {
+            document.getElementById("successMessage").style.display = "block";
+          } else {
+            alert(`Error: ${result.message}`);
+          }
+        } catch (err) {
+          console.error("Error submitting complaint:", err);
+          alert("An error occurred while submitting the complaint.");
+        }
+      }
+    </script>
+  </body>
+</html>
